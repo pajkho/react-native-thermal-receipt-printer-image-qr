@@ -167,32 +167,37 @@ public class NetPrinterAdapter implements PrinterAdapter {
     }
 
     @Override
-    public void selectDevice(PrinterDeviceId printerDeviceId, Callback sucessCallback, Callback errorCallback) {
-        NetPrinterDeviceId netPrinterDeviceId = (NetPrinterDeviceId) printerDeviceId;
+    public void selectDevice(final PrinterDeviceId printerDeviceId, final Callback successCallback, final Callback errorCallback) {
+        final NetPrinterDeviceId netPrinterDeviceId = (NetPrinterDeviceId) printerDeviceId;
 
-        if (this.mSocket != null && !this.mSocket.isClosed()
-                && mNetDevice.getPrinterDeviceId().equals(netPrinterDeviceId)) {
-            Log.i(LOG_TAG, "already selected device, do not need repeat to connect");
-            sucessCallback.invoke(this.mNetDevice.toRNWritableMap());
-            return;
-        }
+        new Thread(new Runnable() {
+            @Override
+            public void run() {
+                if (mSocket != null && !mSocket.isClosed()
+                        && mNetDevice.getPrinterDeviceId().equals(netPrinterDeviceId)) {
+                    Log.i(LOG_TAG, "already selected device, do not need repeat to connect");
+                    successCallback.invoke(mNetDevice.toRNWritableMap());
+                    return;
+                }
 
-        try {
-            Socket socket = new Socket(netPrinterDeviceId.getHost(), netPrinterDeviceId.getPort());
-            if (socket.isConnected()) {
-                closeConnectionIfExists();
-                this.mSocket = socket;
-                this.mNetDevice = new NetPrinterDevice(netPrinterDeviceId.getHost(), netPrinterDeviceId.getPort());
-                sucessCallback.invoke(this.mNetDevice.toRNWritableMap());
-            } else {
-                errorCallback.invoke("unable to build connection with host: " + netPrinterDeviceId.getHost()
-                        + ", port: " + netPrinterDeviceId.getPort());
-                return;
+                try {
+                    Socket socket = new Socket(netPrinterDeviceId.getHost(), netPrinterDeviceId.getPort());
+                    if (socket.isConnected()) {
+                        closeConnectionIfExists();
+                        mSocket = socket;
+                        mNetDevice = new NetPrinterDevice(netPrinterDeviceId.getHost(), netPrinterDeviceId.getPort());
+                        successCallback.invoke(mNetDevice.toRNWritableMap());
+                    } else {
+                        errorCallback.invoke("unable to build connection with host: " + netPrinterDeviceId.getHost()
+                                + ", port: " + netPrinterDeviceId.getPort());
+                        return;
+                    }
+                } catch (IOException e) {
+                    e.printStackTrace();
+                    errorCallback.invoke("failed to connect printer: " + e.getMessage());
+                }
             }
-        } catch (IOException e) {
-            e.printStackTrace();
-            errorCallback.invoke("failed to connect printer: " + e.getMessage());
-        }
+        }).start();
     }
 
     @Override
