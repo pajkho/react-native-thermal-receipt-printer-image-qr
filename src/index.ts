@@ -195,11 +195,18 @@ const USBPrinter = {
    * android print with encoder
    * @param text
    */
-  printRaw: (text: string): void => {
-    if (Platform.OS === "ios") {
-    } else {
-      RNUSBPrinter.printRawData(text, (error: Error) => console.warn(error));
-    }
+
+  printRaw: (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (Platform.OS === "ios") {
+        resolve();
+      } else {
+        RNUSBPrinter.printRawData(text, 
+          (error: Error) => reject(error), // This function will be called when an error occurs
+          () => resolve() // This function will be called when the print operation is successful
+        );
+      }
+    });
   },
   /**
    * `columnWidth`
@@ -341,11 +348,17 @@ const BLEPrinter = {
    * android print with encoder
    * @param text
    */
-  printRaw: (text: string): void => {
-    if (Platform.OS === "ios") {
-    } else {
-      RNBLEPrinter.printRawData(text, (error: Error) => console.warn(error));
-    }
+  printRaw: (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (Platform.OS === "ios") {
+        resolve();
+      } else {
+        RNBLEPrinter.printRawData(text, 
+          (error: Error) => reject(error), // This function will be called when an error occurs
+          () => resolve() // This function will be called when the print operation is successful
+        );
+      }
+    });
   },
   /**
    * `columnWidth`
@@ -498,11 +511,17 @@ const NetPrinter = {
    * Android print with encoder
    * @param text
    */
-  printRaw: (text: string): void => {
-    if (Platform.OS === "ios") {
-    } else {
-      RNNetPrinter.printRawData(text, (error: Error) => console.warn(error));
-    }
+  printRaw: (text: string): Promise<void> => {
+    return new Promise((resolve, reject) => {
+      if (Platform.OS === "ios") {
+        resolve();
+      } else {
+        RNNetPrinter.printRawData(text, 
+          (error: Error) => reject(error), // This function will be called when an error occurs
+          () => resolve() // This function will be called when the print operation is successful
+        );
+      }
+    });
   },
 
   /**

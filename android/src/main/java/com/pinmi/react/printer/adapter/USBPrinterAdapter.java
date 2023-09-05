@@ -222,7 +222,7 @@ public class USBPrinterAdapter implements PrinterAdapter {
     }
 
 
-    public void printRawData(String data, Callback errorCallback) {
+    public void printRawData(String data, Callback errorCallback, Callback successCallback) {
         final String rawData = data;
         Log.v(LOG_TAG, "start to print raw data " + data);
         boolean isConnected = openConnection();
@@ -231,9 +231,15 @@ public class USBPrinterAdapter implements PrinterAdapter {
             new Thread(new Runnable() {
                 @Override
                 public void run() {
-                    byte[] bytes = Base64.decode(rawData, Base64.DEFAULT);
-                    int b = mUsbDeviceConnection.bulkTransfer(mEndPoint, bytes, bytes.length, 100000);
-                    Log.i(LOG_TAG, "Return Status: b-->" + b);
+                    try {
+                        byte[] bytes = Base64.decode(rawData, Base64.DEFAULT);
+                        int b = mUsbDeviceConnection.bulkTransfer(mEndPoint, bytes, bytes.length, 100000);
+                        Log.i(LOG_TAG, "Return Status: b-->" + b);
+                        successCallback.invoke(); // Invoke the success callback
+                    } catch (Exception e) {
+                        Log.e(LOG_TAG, "Error during printing", e);
+                        errorCallback.invoke("Error during printing: " + e.getMessage());
+                    }
                 }
             }).start();
         } else {
