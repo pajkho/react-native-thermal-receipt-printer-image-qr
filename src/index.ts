@@ -201,7 +201,7 @@ const USBPrinter = {
       if (Platform.OS === "ios") {
         resolve();
       } else {
-        RNUSBPrinter.printRawData(text, 
+        RNUSBPrinter.printRawData(text,
           (error: Error) => reject(error), // This function will be called when an error occurs
           () => resolve() // This function will be called when the print operation is successful
         );
@@ -351,9 +351,19 @@ const BLEPrinter = {
   printRaw: (text: string): Promise<void> => {
     return new Promise((resolve, reject) => {
       if (Platform.OS === "ios") {
+          var processedText = textPreprocessingIOS(text, false, false);
+
+          RNBLEPrinter.printRawData(
+              processedText.text,
+              processedText.opts,
+              function (error) {
+                  return console.warn(error);
+              }
+          );
+
         resolve();
       } else {
-        RNBLEPrinter.printRawData(text, 
+        RNBLEPrinter.printRawData(text,
           (error: Error) => reject(error), // This function will be called when an error occurs
           () => resolve() // This function will be called when the print operation is successful
         );
@@ -516,7 +526,7 @@ const NetPrinter = {
       if (Platform.OS === "ios") {
         resolve();
       } else {
-        RNNetPrinter.printRawData(text, 
+        RNNetPrinter.printRawData(text,
           (error: Error) => reject(error), // This function will be called when an error occurs
           () => resolve() // This function will be called when the print operation is successful
         );
