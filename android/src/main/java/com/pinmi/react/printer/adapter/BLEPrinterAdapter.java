@@ -124,9 +124,51 @@ public class BLEPrinterAdapter implements PrinterAdapter{
         }
         Set<BluetoothDevice> pairedDevices = getBTAdapter().getBondedDevices();
 
-        for (BluetoothDevice device : pairedDevices) {
-            if(device.getAddress().equals(blePrinterDeviceId.getInnerMacAddress())){
+        int pairedDevicesCount = pairedDevices.size();
+        Log.v(LOG_TAG, "PAIRED DEVICES: " + pairedDevicesCount);
+        Log.v(LOG_TAG, "TRY TO CONNECT TO DEVICE: " + blePrinterDeviceId.getInnerMacAddress());
 
+        for (BluetoothDevice device : pairedDevices) {
+            Log.v(LOG_TAG, "LOOKING ON DEVICE: " + device.getAddress());
+            if(device.getAddress().equals(blePrinterDeviceId.getInnerMacAddress())){
+                Log.v(LOG_TAG, "FOUND A DEVICE NEW CODE: " + device.getAddress());
+
+                final BluetoothDevice targetDevice = device;
+                new Thread(new Runnable() {
+                    @Override
+                    public void run() {
+                        try {
+                            connectBluetoothDevice(targetDevice, false);
+                            // Invoke success callback on the main thread
+                            mContext.runOnUiQueueThread(new Runnable() {
+                                @Override
+                                public void run() {
+                                    successCallback.invoke(new BLEPrinterDevice(mBluetoothDevice).toRNWritableMap());
+                                }
+                            });
+                        } catch (IOException e) {
+                            try {
+                                connectBluetoothDevice(targetDevice, true);
+                                mContext.runOnUiQueueThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        successCallback.invoke(new BLEPrinterDevice(mBluetoothDevice).toRNWritableMap());
+                                    }
+                                });
+                            } catch (IOException er) {
+                                er.printStackTrace();
+                                mContext.runOnUiQueueThread(new Runnable() {
+                                    @Override
+                                    public void run() {
+                                        errorCallback.invoke(er.getMessage());
+                                    }
+                                });
+                            }
+                        }
+                    }
+                }).start();
+                return;
+                /* OLD CODE
                 try{
                     connectBluetoothDevice(device, false);
                     successCallback.invoke(new BLEPrinterDevice(this.mBluetoothDevice).toRNWritableMap());
@@ -142,12 +184,22 @@ public class BLEPrinterAdapter implements PrinterAdapter{
                         return;
                     }
                 }
+                */
+
             }
         }
         String errorText = "Can not find the specified printing device, please perform Bluetooth pairing in the system settings first.";
+        mContext.runOnUiQueueThread(new Runnable() {
+            @Override
+            public void run() {
+                errorCallback.invoke(errorText);
+            }
+        });
+        /* OLD CODE
         Toast.makeText(this.mContext, errorText, Toast.LENGTH_LONG).show();
         errorCallback.invoke(errorText);
         return;
+        */
     }
 
     private void connectBluetoothDevice(BluetoothDevice device, Boolean retry) throws IOException {
@@ -157,7 +209,8 @@ public class BLEPrinterAdapter implements PrinterAdapter{
             try {
                 this.mBluetoothSocket = (BluetoothSocket) device.getClass()
                         .getMethod("createRfcommSocket", new Class[] { int.class }).invoke(device, 1);
-            } catch (Exception e) {
+           this.mBluetoothSocket.connect();
+         } catch (Exception e) {
                 e.printStackTrace();
             }
         } else {
@@ -198,16 +251,30 @@ public class BLEPrinterAdapter implements PrinterAdapter{
             @Override
             public void run() {
                 byte [] bytes = Base64.decode(rawData, Base64.DEFAULT);
+                Log.v(LOG_TAG, "start to print raw data after bytes");
+
                 try{
                     OutputStream printerOutputStream = socket.getOutputStream();
+                    if(printerOutputStream == null){
+                        Log.e(LOG_TAG, "BluetoothSocket is not connected");
+                        errorCallback.invoke("failed to get output stream");
+                        return;
+                    }
+
+                    Log.v(LOG_TAG, "start to print raw data after getOutputStream");
                     printerOutputStream.write(bytes, 0, bytes.length);
+                    Log.v(LOG_TAG, "start to print raw data after write");
                     printerOutputStream.flush();
+                    Log.v(LOG_TAG, "start to print raw data after flush");
                     successCallback.invoke(); // Invoke the success callback
                 }catch (IOException e){
+                    Log.e(LOG_TAG, "failed to print data IOException" + rawData);
+                    e.printStackTrace();
+                    errorCallback.invoke(e.getMessage());
+                }catch (Exception e){
                     Log.e(LOG_TAG, "failed to print data" + rawData);
                     e.printStackTrace();
                     errorCallback.invoke(e.getMessage());
-
                 }
 
             }
