@@ -88,9 +88,17 @@ public class USBPrinterAdapter implements PrinterAdapter {
                     }
                 }
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
-                if (mUsbDevice != null) {
+                // Only close the connection if the detached device is the one we are using.
+                UsbDevice detached = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
+                if (detached != null && mUsbDevice != null && detached.getDeviceId() == mUsbDevice.getDeviceId()) {
                     Toast.makeText(context, "USB device has been turned off", Toast.LENGTH_LONG).show();
                     closeConnectionIfExists();
+                    mUsbDevice = null;
+                } else if (detached == null && mUsbDevice != null) {
+                    // Some systems may not provide the device in the intent; defensively close if we have a connection.
+                    Toast.makeText(context, "USB device has been turned off", Toast.LENGTH_LONG).show();
+                    closeConnectionIfExists();
+                    mUsbDevice = null;
                 }
             } else if (UsbManager.ACTION_USB_ACCESSORY_ATTACHED.equals(action) || UsbManager.ACTION_USB_DEVICE_ATTACHED.equals(action)) {
                 synchronized (this) {
@@ -218,7 +226,8 @@ public class USBPrinterAdapter implements PrinterAdapter {
                 }
             }
         }
-        return true;
+        Log.e(LOG_TAG, "no suitable OUT bulk endpoint found");
+        return false;
     }
 
 
@@ -282,35 +291,36 @@ public class USBPrinterAdapter implements PrinterAdapter {
         boolean isConnected = openConnection();
         if (isConnected) {
             Log.v(LOG_TAG, "Connected to device");
-            int[][] pixels = getPixelsSlow(bitmapImage, imageWidth, imageHeight);
-
-            int b = mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
-
-            b = mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
-
-            for (int y = 0; y < pixels.length; y += 24) {
-                // Like I said before, when done sending data,
-                // the printer will resume to normal text printing
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
-
-                // Set nL and nH based on the width of the image
-                byte[] row = new byte[]{(byte) (0x00ff & pixels[y].length)
-                        , (byte) ((0xff00 & pixels[y].length) >> 8)};
-
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
-
-                for (int x = 0; x < pixels[y].length; x++) {
-                    // for each stripe, recollect 3 bytes (3 bytes = 24 bits)
-                    byte[] slice = recollectSlice(y, x, pixels);
-                    mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
-                }
-
-                // Do a line feed, if not the printing will resume on the same line
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+            // defensive checks + exception handling so a random disconnect is handled cleanly
+            if (mUsbDeviceConnection == null || mEndPoint == null) {
+                errorCallback.invoke("not connected to USB device");
+                return;
             }
+            try {
+                int[][] pixels = getPixelsSlow(bitmapImage, imageWidth, imageHeight);
 
-            mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
-            mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
+
+                for (int y = 0; y < pixels.length; y += 24) {
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
+                    byte[] row = new byte[]{(byte) (0x00ff & pixels[y].length)
+                            , (byte) ((0xff00 & pixels[y].length) >> 8)};
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
+                    for (int x = 0; x < pixels[y].length; x++) {
+                        byte[] slice = recollectSlice(y, x, pixels);
+                        mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
+                    }
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+                }
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "Error during image printing", e);
+                // clean up to avoid zombie connection
+                closeConnectionIfExists();
+                errorCallback.invoke("Error during printing: " + e.getMessage());
+            }
         } else {
             String msg = "failed to connected to device";
             Log.v(LOG_TAG, msg);
@@ -330,35 +340,32 @@ public class USBPrinterAdapter implements PrinterAdapter {
         boolean isConnected = openConnection();
         if (isConnected) {
             Log.v(LOG_TAG, "Connected to device");
-            int[][] pixels = getPixelsSlow(bitmapImage, imageWidth, imageHeight);
-
-            int b = mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
-
-            b = mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
-
-            for (int y = 0; y < pixels.length; y += 24) {
-                // Like I said before, when done sending data,
-                // the printer will resume to normal text printing
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
-
-                // Set nL and nH based on the width of the image
-                byte[] row = new byte[]{(byte) (0x00ff & pixels[y].length)
-                        , (byte) ((0xff00 & pixels[y].length) >> 8)};
-
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
-
-                for (int x = 0; x < pixels[y].length; x++) {
-                    // for each stripe, recollect 3 bytes (3 bytes = 24 bits)
-                    byte[] slice = recollectSlice(y, x, pixels);
-                    mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
-                }
-
-                // Do a line feed, if not the printing will resume on the same line
-                mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+            if (mUsbDeviceConnection == null || mEndPoint == null) {
+                errorCallback.invoke("not connected to USB device");
+                return;
             }
-
-            mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
-            mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+            try {
+                int[][] pixels = getPixelsSlow(bitmapImage, imageWidth, imageHeight);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_24, SET_LINE_SPACE_24.length, 100000);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, CENTER_ALIGN, CENTER_ALIGN.length, 100000);
+                for (int y = 0; y < pixels.length; y += 24) {
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, SELECT_BIT_IMAGE_MODE, SELECT_BIT_IMAGE_MODE.length, 100000);
+                    byte[] row = new byte[]{(byte) (0x00ff & pixels[y].length)
+                            , (byte) ((0xff00 & pixels[y].length) >> 8)};
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, row, row.length, 100000);
+                    for (int x = 0; x < pixels[y].length; x++) {
+                        byte[] slice = recollectSlice(y, x, pixels);
+                        mUsbDeviceConnection.bulkTransfer(mEndPoint, slice, slice.length, 100000);
+                    }
+                    mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+                }
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, SET_LINE_SPACE_32, SET_LINE_SPACE_32.length, 100000);
+                mUsbDeviceConnection.bulkTransfer(mEndPoint, LINE_FEED, LINE_FEED.length, 100000);
+            } catch (Exception e) {
+                Log.e(LOG_TAG, "Error during image printing", e);
+                closeConnectionIfExists();
+                errorCallback.invoke("Error during printing: " + e.getMessage());
+            }
         } else {
             String msg = "failed to connected to device";
             Log.v(LOG_TAG, msg);
