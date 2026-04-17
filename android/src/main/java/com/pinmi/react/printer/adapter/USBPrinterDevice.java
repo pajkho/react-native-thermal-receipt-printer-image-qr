@@ -35,6 +35,10 @@ public class USBPrinterDevice implements PrinterDevice{
         deviceMap.putInt("device_id", this.mDevice.getDeviceId());
         deviceMap.putInt("vendor_id", this.mDevice.getVendorId());
         deviceMap.putInt("product_id", this.mDevice.getProductId());
+        String productName = this.mDevice.getProductName();
+        String manufacturerName = this.mDevice.getManufacturerName();
+        deviceMap.putString("product_name", productName != null ? productName : "");
+        deviceMap.putString("manufacturer_name", manufacturerName != null ? manufacturerName : "");
         return deviceMap;
     }
 

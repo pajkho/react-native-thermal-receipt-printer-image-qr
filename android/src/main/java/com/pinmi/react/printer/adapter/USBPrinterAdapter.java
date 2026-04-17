@@ -120,7 +120,12 @@ public class USBPrinterAdapter implements PrinterAdapter {
         filter.addAction(UsbManager.ACTION_USB_DEVICE_DETACHED);
         filter.addAction(UsbManager.ACTION_USB_ACCESSORY_ATTACHED);
         filter.addAction(UsbManager.ACTION_USB_DEVICE_ATTACHED);
-        mContext.registerReceiver(mUsbDeviceReceiver, filter);
+        if (android.os.Build.VERSION.SDK_INT >= 33) {
+            // API 33+ requires RECEIVER_NOT_EXPORTED (value 4) or RECEIVER_EXPORTED flag
+            mContext.registerReceiver(mUsbDeviceReceiver, filter, 4);
+        } else {
+            mContext.registerReceiver(mUsbDeviceReceiver, filter);
+        }
         Log.v(LOG_TAG, "RNUSBPrinter initialized");
         successCallback.invoke();
     }
