@@ -77,16 +77,21 @@ public class USBPrinterAdapter implements PrinterAdapter {
                 synchronized (this) {
                     UsbDevice usbDevice = intent.getParcelableExtra(UsbManager.EXTRA_DEVICE);
                     if (intent.getBooleanExtra(UsbManager.EXTRA_PERMISSION_GRANTED, false)) {
-                        assert usbDevice != null;
+                        if (usbDevice == null) {
+                            Log.w(LOG_TAG, "USB permission granted but EXTRA_DEVICE was null");
+                            return;
+                        }
                         Log.i(LOG_TAG,
                                 "success to grant permission for device " + usbDevice.getDeviceId() + ", vendor_id: "
                                         + usbDevice.getVendorId() + " product_id: " + usbDevice.getProductId());
                         mUsbDevice = usbDevice;
                     } else {
-                        assert usbDevice != null;
-                        Toast.makeText(context,
-                                "User refuses to obtain USB device permissions" + usbDevice.getDeviceName(),
-                                Toast.LENGTH_LONG).show();
+                        Log.w(LOG_TAG, "USB permission denied" + (usbDevice != null ? " for " + usbDevice.getDeviceName() : ""));
+                        if (usbDevice != null) {
+                            Toast.makeText(context,
+                                    "User refuses to obtain USB device permissions " + usbDevice.getDeviceName(),
+                                    Toast.LENGTH_LONG).show();
+                        }
                     }
                 }
             } else if (UsbManager.ACTION_USB_DEVICE_DETACHED.equals(action)) {
@@ -190,7 +195,13 @@ public class USBPrinterAdapter implements PrinterAdapter {
                 Log.v(LOG_TAG, "request for device: vendor_id: " + usbPrinterDeviceId.getVendorId() + ", product_id: "
                         + usbPrinterDeviceId.getProductId());
                 closeConnectionIfExists();
-                mUSBManager.requestPermission(usbDevice, mPermissionIndent);
+                if (mUSBManager.hasPermission(usbDevice)) {
+                    // Already permitted (e.g. via system whitelist) — assign directly,
+                    // because the permission broadcast may arrive without EXTRA_DEVICE.
+                    mUsbDevice = usbDevice;
+                } else {
+                    mUSBManager.requestPermission(usbDevice, mPermissionIndent);
+                }
                 successCallback.invoke(new USBPrinterDevice(usbDevice).toRNWritableMap());
                 return;
             }
